@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "441682743017",
+    "project_id": "hanbat-campus-app",
+    "storage_bucket": "hanbat-campus-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:441682743017:android:cc8fe51dcc877b8c9c2a78",
+        "android_client_info": {
+          "package_name": "com.example.hanbat_campus_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtc6N7EiXKB5atMtKckkIAYuqD1YdmrPY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
