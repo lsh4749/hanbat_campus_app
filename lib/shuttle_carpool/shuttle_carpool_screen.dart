@@ -31,6 +31,34 @@ class ShuttleCarpoolScreen extends StatelessWidget {
   }
 }
 
+class _BusStop {
+  final String name;
+  final String detail;
+  final String coords;
+
+  const _BusStop({
+    required this.name,
+    required this.detail,
+    required this.coords,
+  });
+}
+
+class _BusRoute {
+  final String title;
+  final String badge;
+  final String description;
+  final List<_BusStop> stops;
+  final List<String> times;
+
+  const _BusRoute({
+    required this.title,
+    required this.badge,
+    required this.description,
+    required this.stops,
+    required this.times,
+  });
+}
+
 // ============================================================================
 // 1. 통학 임차버스 정류장 핀 & 노선 시간표 탭
 // ============================================================================
@@ -42,55 +70,56 @@ class _CommuterBusTab extends StatefulWidget {
 }
 
 class _CommuterBusTabState extends State<_CommuterBusTab> {
-  String _selectedRoute = '등교 노선 (유성온천역 · 현충원역 방면)';
+  int _selectedIndex = 0;
 
-  // 추후 정적 JSON 스키마와 1:1 매핑 가능한 구조
-  final Map<String, Map<String, dynamic>> _busRoutes = {
-    '등교 노선 (유성온천역 · 현충원역 방면)': {
-      'badge': '등교 임차버스',
-      'description': '평일 학기 중 운행 (공휴일·방학 미운행)',
-      'stops': [
-        {
-          'name': '유성온천역 7번 출구 앞',
-          'detail': '출구 직진 30m 버스 베이 승차',
-          'coords': '36.3538, 127.3415',
-        },
-        {
-          'name': '현충원역 3번 출구 건너편',
-          'detail': '현충원역 시내버스 정류장 인근',
-          'coords': '36.3589, 127.3218',
-        },
-        {
-          'name': '한밭대학교 정문 (N1동 앞)',
-          'detail': '교내 진입 후 도서관·N1동 방면 하차',
-          'coords': '36.3508, 127.3005',
-        },
+  final List<_BusRoute> _routes = const [
+    _BusRoute(
+      title: '등교 노선 (유성온천역 · 현충원역 방면)',
+      badge: '등교 임차버스',
+      description: '평일 학기 중 운행 (공휴일·방학 미운행)',
+      stops: [
+        _BusStop(
+          name: '유성온천역 7번 출구 앞',
+          detail: '출구 직진 30m 버스 베이 승차',
+          coords: '36.3538, 127.3415',
+        ),
+        _BusStop(
+          name: '현충원역 3번 출구 건너편',
+          detail: '현충원역 시내버스 정류장 인근',
+          coords: '36.3589, 127.3218',
+        ),
+        _BusStop(
+          name: '한밭대학교 정문 (N1동 앞)',
+          detail: '교내 진입 후 도서관·N1동 방면 하차',
+          coords: '36.3508, 127.3005',
+        ),
       ],
-      'times': ['08:10', '08:25', '08:40', '09:10', '09:40', '10:10'],
-    },
-    '하교 노선 (한밭대 → 유성온천역 방면)': {
-      'badge': '하교 임차버스',
-      'description': '수업 종료 시간대 집중 배차',
-      'stops': [
-        {
-          'name': '한밭대학교 정문 승차장',
-          'detail': 'N1동 맞은편 임차버스 대기 구역',
-          'coords': '36.3508, 127.3005',
-        },
-        {
-          'name': '현충원역 정류장',
-          'detail': '도시철도 1호선 환승 하차',
-          'coords': '36.3589, 127.3218',
-        },
-        {
-          'name': '유성온천역 7번 출구',
-          'detail': '종점 하차',
-          'coords': '36.3538, 127.3415',
-        },
+      times: ['08:10', '08:25', '08:40', '09:10', '09:40', '10:10'],
+    ),
+    _BusRoute(
+      title: '하교 노선 (한밭대 → 유성온천역 방면)',
+      badge: '하교 임차버스',
+      description: '수업 종료 시간대 집중 배차',
+      stops: [
+        _BusStop(
+          name: '한밭대학교 정문 승차장',
+          detail: 'N1동 맞은편 임차버스 대기 구역',
+          coords: '36.3508, 127.3005',
+        ),
+        _BusStop(
+          name: '현충원역 정류장',
+          detail: '도시철도 1호선 환승 하차',
+          coords: '36.3589, 127.3218',
+        ),
+        _BusStop(
+          name: '유성온천역 7번 출구',
+          detail: '종점 하차',
+          coords: '36.3538, 127.3415',
+        ),
       ],
-      'times': ['15:10', '16:10', '17:10', '17:40', '18:10', '19:10'],
-    },
-  };
+      times: ['15:10', '16:10', '17:10', '17:40', '18:10', '19:10'],
+    ),
+  ];
 
   String? _getNextBusInfo(List<String> times) {
     final now = TimeOfDay.now();
@@ -109,33 +138,30 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
 
   @override
   Widget build(BuildContext context) {
-    final current = _busRoutes[_selectedRoute]!;
-    final List> stops =
-        List>.from(current['stops']);
-    final List<String> times = List<String>.from(current['times']);
-    final nextBus = _getNextBusInfo(times);
+    final current = _routes[_selectedIndex];
+    final nextBus = _getNextBusInfo(current.times);
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        DropdownButtonFormField<String>(
-          value: _selectedRoute,
+        DropdownButtonFormField<int>(
+          value: _selectedIndex,
           decoration: const InputDecoration(
             labelText: '통학 임차버스 노선 선택',
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           ),
-          items: _busRoutes.keys
-              .map((route) => DropdownMenuItem(value: route, child: Text(route)))
-              .toList(),
+          items: List.generate(
+            _routes.length,
+            (i) => DropdownMenuItem(value: i, child: Text(_routes[i].title)),
+          ),
           onChanged: (val) {
-            if (val != null) setState(() => _selectedRoute = val);
+            if (val != null) setState(() => _selectedIndex = val);
           },
         ),
         const SizedBox(height: 16),
 
-        // 다음 배차 요약 카드
         Card(
           color: colorScheme.primaryContainer,
           child: Padding(
@@ -148,7 +174,7 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
                     Icon(Icons.departure_board, color: colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
-                      current['badge'],
+                      current.badge,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
@@ -165,7 +191,7 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  current['description'],
+                  current.description,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -174,7 +200,6 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
         ),
         const SizedBox(height: 20),
 
-        // 정류장 핀 안내 섹션
         Text(
           '정류장 위치 핀 & 승차 안내',
           style: Theme.of(context)
@@ -183,9 +208,8 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
               ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        ...stops.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final stop = entry.value;
+        ...List.generate(current.stops.length, (idx) {
+          final stop = current.stops[idx];
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -194,19 +218,19 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
                 child: Icon(Icons.location_on, color: colorScheme.primary),
               ),
               title: Text(
-                '${idx + 1}. ${stop['name']}',
+                '${idx + 1}. ${stop.name}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text('${stop['detail']}\n좌표: ${stop['coords']}'),
+              subtitle: Text('${stop.detail}\n좌표: ${stop.coords}'),
               isThreeLine: true,
               trailing: IconButton(
                 tooltip: '좌표 복사',
                 icon: const Icon(Icons.copy, size: 20),
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: stop['coords']!));
+                  Clipboard.setData(ClipboardData(text: stop.coords));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('${stop['name']} 좌표가 복사되었습니다.'),
+                      content: Text('${stop.name} 좌표가 복사되었습니다.'),
                       duration: const Duration(seconds: 1),
                     ),
                   );
@@ -217,7 +241,6 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
         }),
         const SizedBox(height: 16),
 
-        // 전체 시간표 섹션
         Text(
           '노선별 운행 시간표',
           style: Theme.of(context)
@@ -229,7 +252,7 @@ class _CommuterBusTabState extends State<_CommuterBusTab> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: times.map((time) {
+          children: current.times.map((time) {
             final isNext = nextBus != null && nextBus.startsWith(time);
             return Chip(
               avatar: isNext
@@ -272,7 +295,7 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
 
   String _userId = '';
   String _nickname = '익명 한밭인';
-  String _filterType = '전체'; // '전체', '택시', '자차'
+  String _filterType = '전체';
 
   @override
   void initState() {
@@ -280,7 +303,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     _loadUserProfile();
   }
 
-  /// No-Auth 환경: 로컬 기기 ID 및 사용자 설정 익명 닉네임 로드
   Future<void> _loadUserProfile() async {
     final prefs = await SharedPreferences.getInstance();
     String? id = prefs.getString('no_auth_user_id');
@@ -297,7 +319,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     }
   }
 
-  /// 익명 닉네임 변경 다이얼로그
   void _showNicknameDialog() {
     final nickCtrl = TextEditingController(text: _nickname);
     showDialog(
@@ -333,7 +354,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     );
   }
 
-  /// 파티 참여 / 취소 (Transaction 기반 동시성 제어)
   Future<void> _toggleJoin(DocumentSnapshot doc) async {
     if (_userId.isEmpty) return;
 
@@ -368,7 +388,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     });
   }
 
-  /// 파티 생성 및 수정 다이얼로그 (Create & Update)
   void _showPartyFormDialog({DocumentSnapshot? existingDoc}) {
     final isEdit = existingDoc != null;
     final data = isEdit ? existingDoc.data() as Map<String, dynamic> : {};
@@ -396,7 +415,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 이동 수단 선택 (택시 / 자차)
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(
@@ -526,7 +544,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     return Scaffold(
       body: Column(
         children: [
-          // 상단 바: 익명 닉네임 표시 및 필터 칩
           Container(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
             color: colorScheme.surfaceContainerLowest,
@@ -559,8 +576,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
               ],
             ),
           ),
-
-          // 실시간 파티 목록 (Read)
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream:
@@ -622,7 +637,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 유형 배지 + 경로 + 인원
                             Row(
                               children: [
                                 Container(
@@ -667,15 +681,11 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                               ],
                             ),
                             const SizedBox(height: 8),
-
-                            // 출발 시각 및 방장
                             Text(
                               '출발: $departureTime  ·  방장: $hostNick',
                               style: TextStyle(
                                   fontSize: 13, color: Colors.grey.shade700),
                             ),
-
-                            // 현재 참여자 닉네임 목록
                             if (memberNicks.isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Text(
@@ -684,8 +694,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                                     fontSize: 13, color: Colors.grey.shade800),
                               ),
                             ],
-
-                            // 메모/차량 안내
                             if (note.isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Text(
@@ -693,8 +701,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ],
-
-                            // 오픈채팅 링크 복사 버튼 (참여자 또는 방장에게 노출)
                             if (openChatUrl.isNotEmpty &&
                                 (isJoined || isHost)) ...[
                               const SizedBox(height: 8),
@@ -715,8 +721,6 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
                               ),
                             ],
                             const SizedBox(height: 8),
-
-                            // 하단 CRUD 액션 버튼
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
