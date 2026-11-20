@@ -1,0 +1,83 @@
+rules_version = '2';
+
+// 한밭 라이프 Firestore 보안 규칙
+// - 앱은 시작할 때 Firebase 익명 로그인을 하므로 모든 사용자에게 request.auth.uid가 있다.
+// - clubs(소모임)는 아래 세부 규칙으로 보호한다.
+// - 다른 기능의 컬렉션은 각 담당자가 규칙을 추가하기 전까지 "로그인한 사용자면 읽기/쓰기 허용".
+//
+// 적용 방법: Firebase 콘솔 > Firestore Database > 규칙 탭에 전체를 붙여넣고 [게시]
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ===================== 소모임 (담당: 이승현) =====================
+    match /clubs/{clubId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.participants == [request.auth.uid]
+        && request.resource.data.currentMembers == 1
+        && request.resource.data.maxMembers is int
+        && request.resource.data.maxMembers >= 2
+        && request.resource.data.maxMembers <= 30
+        && request.resource.data.isClosedEarly == false
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 100;
+
+      allow update: if isSignedIn()
+        && (isCreatorToggle() || isJoin() || isLeave());
+
+      allow delete: if isSignedIn()
+        && resource.data.creatorId == request.auth.uid;
+
+      // 모임장: 조기 마감 여부만 변경 가능
+      function isCreatorToggle() {
+        return resource.data.creatorId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['isClosedEarly']);
+      }
+
+      // 참여: 자기 uid 하나만 추가, 정원·마감 확인, 인원 수 = 목록 길이
+      function isJoin() {
+        let before = resource.data.participants;
+        let after = request.resource.data.participants;
+        return request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['participants', 'currentMembers'])
+          && !(request.auth.uid in before)
+          && request.auth.uid in after
+          && after.hasAll(before)
+          && after.size() == before.size() + 1
+          && after.size() <= resource.data.maxMembers
+          && resource.data.isClosedEarly == false
+          && request.resource.data.currentMembers == after.size();
+      }
+
+      // 참여 취소: 자기 uid 하나만 제거 (모임장은 불가)
+      function isLeave() {
+        let before = resource.data.participants;
+        let after = request.resource.data.participants;
+        return request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['participants', 'currentMembers'])
+          && resource.data.creatorId != request.auth.uid
+          && request.auth.uid in before
+          && !(request.auth.uid in after)
+          && before.hasAll(after)
+          && after.size() == before.size() - 1
+          && request.resource.data.currentMembers == after.size();
+      }
+    }
+
+    // ===================== 그 외 기능 (임시) =====================
+    // clubs를 제외한 나머지 컬렉션. 각 담당자가 위처럼 전용 규칙을 만들면
+    // 그 컬렉션 이름을 아래 조건에 추가해 제외해 주세요.
+    // (규칙은 OR로 합쳐지므로, 여기서 clubs를 빼지 않으면 위 보호가 무력화됩니다.)
+    match /{collection}/{rest=**} {
+      allow read, write: if isSignedIn() && collection != 'clubs';
+    }
+  }
+}
