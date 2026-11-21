@@ -4,6 +4,7 @@ import '../shuttle_carpool/shuttle_carpool_screen.dart';
 import '../lost_found/lost_found_screen.dart';
 import '../restaurant/restaurant_screen.dart';
 import '../club/club_screen.dart';
+import '../club/widgets/club_preview_card.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -103,13 +104,8 @@ class HomeScreen extends StatelessWidget {
             targetScreen: const RestaurantScreen(),
           ),
           const SizedBox(height: 12),
-          _buildDashboardCard(
-            context,
-            icon: Icons.campaign,
-            title: '실시간 소모임 · 카풀 모집',
-            subtitle: '[풋살] 오늘 19시 대운동장 인원 모집 중 (8/10명)',
-            targetScreen: const ClubScreen(),
-          ),
+          // Firestore 실시간 데이터로 모집 중인 소모임을 보여주는 카드
+          const ClubPreviewCard(),
         ],
       ),
     );
