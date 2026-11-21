@@ -45,6 +45,9 @@ class Club {
   bool get isFull => currentMembers >= maxMembers;
   bool get isRecruiting => !isFull && !isClosedEarly;
 
+  /// 정원의 50%를 넘게 모인 인기 모임 (홈 화면 불꽃 표시)
+  bool get isHot => maxMembers > 0 && currentMembers / maxMembers > 0.5;
+
   String get statusLabel {
     if (isClosedEarly) return '조기 마감';
     if (isFull) return '모집 마감';
