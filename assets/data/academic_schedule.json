@@ -1,0 +1,14 @@
+{
+  "note": "예시 데이터입니다. 실제 날짜는 한밭대 홈페이지 학사일정을 보고 교체해 주세요. type: exam(시험) | course(수강신청) | tuition(등록금) | vacation(방학·휴일) | event(행사)",
+  "events": [
+    { "title": "겨울 계절학기 수강신청", "start": "2026-11-24", "end": "2026-11-26", "type": "course" },
+    { "title": "2학기 기말고사", "start": "2026-12-14", "end": "2026-12-18", "type": "exam" },
+    { "title": "겨울방학 시작", "start": "2026-12-21", "type": "vacation" },
+    { "title": "겨울 계절학기 수업", "start": "2026-12-21", "end": "2027-01-12", "type": "course" },
+    { "title": "1학기 예비수강신청", "start": "2027-01-27", "end": "2027-01-28", "type": "course" },
+    { "title": "1학기 수강신청", "start": "2027-02-01", "end": "2027-02-05", "type": "course" },
+    { "title": "1학기 등록금 납부", "start": "2027-02-22", "end": "2027-02-26", "type": "tuition" },
+    { "title": "1학기 개강", "start": "2027-03-02", "type": "event" },
+    { "title": "1학기 수강정정", "start": "2027-03-02", "end": "2027-03-08", "type": "course" }
+  ]
+}

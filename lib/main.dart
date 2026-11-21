@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'home/home_screen.dart';
+import 'app/app_theme.dart';
+import 'app/main_shell.dart';
+import 'notifications/notification_center.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +12,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await _signInAnonymously();
+  // 알림함: 새 소모임·분실물 글 구독, 일정 알림 계산 (화면을 막지 않도록 기다리지 않음)
+  NotificationCenter.instance.start();
   runApp(const HanbatCampusApp());
 }
 
@@ -34,11 +38,8 @@ class HanbatCampusApp extends StatelessWidget {
     return MaterialApp(
       title: '한밭 라이프',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF004098)),
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
+      theme: AppTheme.light(),
+      home: const MainShell(),
     );
   }
 }

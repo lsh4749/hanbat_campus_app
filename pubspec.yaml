@@ -40,7 +40,6 @@ dependencies:
   firebase_storage: ^14.0.1
   shared_preferences: ^2.5.6
   firebase_auth: ^7.1.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -62,6 +61,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # 팀 공용 정적 데이터(JSON)는 assets/data/ 폴더에 넣으면 따로 등록하지 않아도 됩니다.
+  assets:
+    - assets/data/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
