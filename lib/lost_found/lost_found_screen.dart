@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../building/building_data.dart';
+
 import 'lost_found_item.dart';
+import 'lost_found_matcher.dart';
 import 'lost_found_repository.dart';
 import 'lost_found_write_screen.dart';
 
@@ -16,13 +19,16 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
   final _repository = LostFoundRepository();
   final _searchController = TextEditingController();
   late final Stream<List<LostFoundItem>> _itemsStream;
+  late final Future<CampusBuildings> _buildingsFuture;
   String _selectedType = '분실물';
+  String _selectedBuildingCode = 'all';
   String _searchText = '';
 
   @override
   void initState() {
     super.initState();
     _itemsStream = _repository.watchAll();
+    _buildingsFuture = CampusRepository.instance.loadBuildings();
   }
 
   @override
@@ -91,6 +97,59 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
     );
   }
 
+  void _showMatches(LostFoundItem source, List<LostFoundItem> all) {
+    final matches = findLostFoundMatches(source, all);
+    final targetType = source.type == '분실물' ? '습득물' : '분실물';
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('비슷한 $targetType 추천'),
+        content: SizedBox(
+          width: 520,
+          height: matches.isEmpty ? 135 : 340,
+          child: matches.isEmpty
+              ? const Text(
+                  '조건에 맞는 게시물이 아직 없어요.\n'
+                  '같은 종류의 물품이 등록되면 여기에서 비교할 수 있어요.',
+                )
+              : ListView.separated(
+                  itemCount: matches.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final match = matches[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${match.item.title} · ${match.score}점'),
+                      subtitle: Text(
+                        '${match.item.location}\n'
+                        '${match.reasons.join(', ')}',
+                      ),
+                      isThreeLine: true,
+                      onTap: () {
+                        Navigator.of(dialogContext).pop();
+                        _showDetail(match.item);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Text(
+              '추천 점수는 같은 물품일 확률이나 소유권 확인이 아니에요.',
+              style: TextStyle(fontSize: 11),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,6 +187,45 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                   ),
                   onChanged: (value) => setState(() => _searchText = value),
                 ),
+                const SizedBox(height: 12),
+                FutureBuilder<CampusBuildings>(
+                  future: _buildingsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Text('건물 목록을 불러오지 못했어요.');
+                    }
+                    if (!snapshot.hasData) {
+                      return const LinearProgressIndicator();
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedBuildingCode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '건물별 검색',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: 'all', child: Text('전체 건물'),
+                        ),
+                        for (final building in snapshot.data!.buildings)
+                          DropdownMenuItem<String>(
+                            value: building.code,
+                            child: Text(
+                              '${building.code} ${building.name}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedBuildingCode = value);
+                        }
+                      },
+                    );
+                  },
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -156,6 +254,10 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                       final query = _searchText.trim().toLowerCase();
                       final visible = snapshot.data!.where((item) {
                         if (item.type != _selectedType) return false;
+                        if (_selectedBuildingCode != 'all' &&
+                            item.buildingCode != _selectedBuildingCode) {
+                          return false;
+                        }
                         return item.title.toLowerCase().contains(query) ||
                             item.location.toLowerCase().contains(query);
                       }).toList();
@@ -175,7 +277,13 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                               subtitle: Text(
                                 '${item.location} · ${item.eventDateLabel}',
                               ),
-                              trailing: const Icon(Icons.chevron_right),
+                              trailing: OutlinedButton.icon(
+                                onPressed: () => _showMatches(
+                                  item, snapshot.data!,
+                                ),
+                                icon: const Icon(Icons.auto_awesome_outlined),
+                                label: const Text('추천'),
+                              ),
                               onTap: () => _showDetail(item),
                             ),
                           );
