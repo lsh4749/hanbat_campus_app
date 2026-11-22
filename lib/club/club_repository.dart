@@ -28,6 +28,20 @@ class ClubRepository {
   /// 현재 기기의 익명 사용자 uid. 로그인에 실패했으면 null.
   String? get currentUid => _auth.currentUser?.uid;
 
+  /// 현재 기기의 익명 닉네임 (uid로 계산하므로 항상 같음)
+  String? get myNickname {
+    final uid = currentUid;
+    return uid == null ? null : nicknameFor(uid);
+  }
+
+  /// 저장용 일시 문자열 (예: '11.24(화) 19:00'). 상대 표현 없이 날짜로 저장한다.
+  static String _absoluteTime(DateTime t) {
+    const w = ['월', '화', '수', '목', '금', '토', '일'];
+    final hm =
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    return '${t.month}.${t.day}(${w[t.weekday - 1]}) $hm';
+  }
+
   String _requireUid() {
     final uid = currentUid;
     if (uid == null) {
@@ -61,23 +75,72 @@ class ClubRepository {
     required String category,
     required String title,
     required String location,
-    required String time,
+    required DateTime meetAt,
     required String description,
     required int maxMembers,
   }) async {
     final uid = _requireUid();
+    if (meetAt.isBefore(DateTime.now())) {
+      throw const ClubException('모임 시간은 지금 이후로 골라 주세요.');
+    }
     await _guard(() => _clubs.add({
           'category': category,
           'title': title,
           'location': location,
-          'time': time,
+          'meetAt': Timestamp.fromDate(meetAt),
+          'time': _absoluteTime(meetAt),
           'description': description,
           'creatorId': uid,
+          'creatorNickname': nicknameFor(uid),
           'participants': [uid],
           'currentMembers': 1,
           'maxMembers': maxMembers,
           'isClosedEarly': false,
           'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }));
+  }
+
+  /// 모집글 수정 (모임장만). 정원은 지금 참여 인원보다 적게 줄일 수 없다.
+  Future<void> update(
+    String clubId, {
+    required String category,
+    required String title,
+    required String location,
+    required DateTime meetAt,
+    required String description,
+    required int maxMembers,
+  }) async {
+    final uid = _requireUid();
+    final ref = _clubs.doc(clubId);
+    await _guard(() => _db.runTransaction((tx) async {
+          final snap = await tx.get(ref);
+          if (!snap.exists) throw const ClubException('삭제된 모집글이에요.');
+          final club = Club.fromDoc(snap);
+
+          if (club.creatorId != uid) {
+            throw const ClubException('본인이 만든 모임만 수정할 수 있어요.');
+          }
+          if (maxMembers < club.currentMembers) {
+            throw ClubException(
+                '이미 ${club.currentMembers}명이 참여 중이라 정원을 그보다 줄일 수 없어요.');
+          }
+          final timeChanged = club.meetAt == null ||
+              !club.meetAt!.isAtSameMomentAs(meetAt);
+          if (timeChanged && meetAt.isBefore(DateTime.now())) {
+            throw const ClubException('모임 시간은 지금 이후로 골라 주세요.');
+          }
+
+          tx.update(ref, {
+            'category': category,
+            'title': title,
+            'location': location,
+            'meetAt': Timestamp.fromDate(meetAt),
+            'time': _absoluteTime(meetAt),
+            'description': description,
+            'maxMembers': maxMembers,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         }));
   }
 
@@ -92,6 +155,7 @@ class ClubRepository {
           final club = Club.fromDoc(snap);
 
           if (club.participants.contains(uid)) return;
+          if (club.isExpired) throw const ClubException('이미 끝난 모임이에요.');
           if (club.isClosedEarly) {
             throw const ClubException('모임장이 모집을 마감했어요.');
           }
