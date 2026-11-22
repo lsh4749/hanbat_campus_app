@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../app/app_theme.dart';
+import '../club/club.dart' show nicknameFor;
 import 'chat_texts.dart';
 import 'models/chat_models.dart';
 
@@ -17,7 +19,12 @@ class ChatRepository extends ChangeNotifier {
   static final ChatRepository instance = ChatRepository._();
 
   /// 현재 로그인한 내 익명 ID (Mock)
-  final String myUserId = '한밭_익명24';
+  /// 소모임·카풀과 같은 자동 익명 닉네임 (예: '용감한 너구리')
+  /// 익명 로그인이 안 됐을 때만 예전 예시 이름을 쓴다.
+  String get myUserId {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null ? '한밭_익명24' : nicknameFor(uid);
+  }
   final Color myAvatarColor = AppColors.primary;
 
   late List<ChatRoom> _rooms;
