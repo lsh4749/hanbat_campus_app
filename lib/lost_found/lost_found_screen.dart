@@ -1,13 +1,181 @@
+
 import 'package:flutter/material.dart';
 
-class LostFoundScreen extends StatelessWidget {
+class LostFoundScreen extends StatefulWidget {
   const LostFoundScreen({super.key});
 
   @override
+  State<LostFoundScreen> createState() => _LostFoundScreenState();
+}
+
+class _LostFoundScreenState extends State<LostFoundScreen> {
+  String selectedType = '분실물';
+  String searchText = '';
+
+  // 화면 테스트용 임시 데이터
+  final List<Map<String, String>> items = [
+    {
+      'type': '분실물',
+      'title': '에어팟',
+      'location': 'S1 도서관',
+      'date': '2026-11-20',
+      'description': '흰색 에어팟입니다. 도서관 2층에서 잃어버렸어요.',
+    },
+    {
+      'type': '분실물',
+      'title': '검은색 지갑',
+      'location': 'S2 학생회관',
+      'date': '2026-11-19',
+      'description': '학생회관 근처에서 분실했습니다.',
+    },
+    {
+      'type': '습득물',
+      'title': '학생증',
+      'location': 'S1 도서관',
+      'date': '2026-11-20',
+      'description': '도서관 입구에서 주웠습니다.',
+    },
+    {
+      'type': '습득물',
+      'title': '에어팟',
+      'location': 'S1 도서관',
+      'date': '2026-11-20',
+      'description': '흰색 에어팟을 도서관에서 발견했습니다.',
+    },
+  ];
+
+  @override
   Widget build(BuildContext context) {
+    final filteredItems = items.where((item) {
+      final matchesType = item['type'] == selectedType;
+      final matchesSearch =
+          item['title']!.toLowerCase().contains(
+                searchText.toLowerCase(),
+              ) ||
+          item['location']!.toLowerCase().contains(
+                searchText.toLowerCase(),
+              );
+
+      return matchesType && matchesSearch;
+    }).toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('분실물 찾아주기')),
-      body: const Center(child: Text('3번 팀원 개발 영역입니다.')),
+      appBar: AppBar(
+        title: const Text('분실물 찾아주기'),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '캠퍼스 분실물 찾기',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // 분실물 / 습득물 전환
+                Wrap(
+                  spacing: 12,
+                  children: ['분실물', '습득물'].map((type) {
+                    return ChoiceChip(
+                      label: Text(type),
+                      selected: selectedType == type,
+                      onSelected: (_) {
+                        setState(() {
+                          selectedType = type;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 검색창
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: '물품 이름 또는 장소 검색',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      searchText = value;
+                    });
+                  },
+                ),
+
+                const SizedBox(height: 20),
+
+                Text(
+                  '검색 결과 ${filteredItems.length}건',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // 게시물 목록
+                Expanded(
+                  child: filteredItems.isEmpty
+                      ? const Center(
+                          child: Text('검색 결과가 없습니다.'),
+                        )
+                      : ListView.builder(
+                          itemCount: filteredItems.length,
+                          itemBuilder: (context, index) {
+                            final item = filteredItems[index];
+
+                            return Card(
+                              child: ListTile(
+                                leading: const Icon(
+                                  Icons.inventory_2_outlined,
+                                ),
+                                title: Text(item['title']!),
+                                subtitle: Text(
+                                  '${item['location']} · ${item['date']}',
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right,
+                                ),
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: Text(item['title']!),
+                                      content: Text(
+                                        item['description']!,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(context);
+                                          },
+                                          child: const Text('닫기'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
