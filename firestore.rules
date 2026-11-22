@@ -27,19 +27,36 @@ service cloud.firestore {
         && request.resource.data.isClosedEarly == false
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
-        && request.resource.data.title.size() <= 100;
+        && request.resource.data.title.size() <= 100
+        && (!('meetAt' in request.resource.data)
+            || request.resource.data.meetAt is timestamp);
 
       allow update: if isSignedIn()
-        && (isCreatorToggle() || isJoin() || isLeave());
+        && (isCreatorEdit() || isJoin() || isLeave());
 
       allow delete: if isSignedIn()
         && resource.data.creatorId == request.auth.uid;
 
-      // 모임장: 조기 마감 여부만 변경 가능
-      function isCreatorToggle() {
+      // 모임장: 글 내용·일시·정원·조기 마감 수정 가능
+      // (참여자 목록, 작성자, 닉네임, 작성 시간은 못 바꿈 / 정원은 현재 인원 이상 30 이하)
+      function isCreatorEdit() {
         return resource.data.creatorId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['isClosedEarly']);
+               .hasOnly(['title', 'location', 'time', 'meetAt', 'description',
+                         'category', 'maxMembers', 'isClosedEarly', 'updatedAt'])
+          && request.resource.data.maxMembers is int
+          && request.resource.data.maxMembers >= resource.data.participants.size()
+          && request.resource.data.maxMembers <= 30
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 100;
+      }
+
+      // 모임 시간이 지났는지 (meetAt 없는 예전 글은 안 지난 것으로 봄)
+      function isExpired() {
+        return 'meetAt' in resource.data
+          && resource.data.meetAt is timestamp
+          && request.time > resource.data.meetAt;
       }
 
       // 참여: 자기 uid 하나만 추가, 정원·마감 확인, 인원 수 = 목록 길이
@@ -54,6 +71,7 @@ service cloud.firestore {
           && after.size() == before.size() + 1
           && after.size() <= resource.data.maxMembers
           && resource.data.isClosedEarly == false
+          && !isExpired()
           && request.resource.data.currentMembers == after.size();
       }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_theme.dart';
+import '../app/widgets/pill_chip.dart';
 import 'club.dart';
 import 'club_repository.dart';
 import 'widgets/club_card.dart';
@@ -66,12 +68,15 @@ class _ClubScreenState extends State<ClubScreen> {
     _showSnack('[${club.title}] 채팅방 연결 예정 (Room ID: club_${club.id})');
   }
 
-  Future<void> _showCreateClubDialog() async {
-    final created = await showDialog<bool>(
+  /// 새 글 작성 ([club]이 없을 때) 또는 내 글 수정 ([club]이 있을 때)
+  Future<void> _showClubForm({Club? club}) async {
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _CreateClubDialog(repo: _repo),
+      builder: (_) => _ClubFormDialog(repo: _repo, club: club),
     );
-    if (created == true) _showSnack('소모임 모집글이 등록되었습니다!');
+    if (saved == true) {
+      _showSnack(club == null ? '소모임 모집글이 등록되었습니다!' : '모집글을 수정했어요.');
+    }
   }
 
   Future<void> _confirmAndDelete(Club club) async {
@@ -99,74 +104,135 @@ class _ClubScreenState extends State<ClubScreen> {
   }
 
   List<Club> _applyFilters(List<Club> clubs) {
-    return clubs.where((c) {
+    final filtered = clubs.where((c) {
       if (_selectedCategory != '전체' && c.category != _selectedCategory) {
         return false;
       }
       if (_searchQuery.isEmpty) return true;
       return c.title.toLowerCase().contains(_searchQuery) ||
           c.location.toLowerCase().contains(_searchQuery) ||
-          c.description.toLowerCase().contains(_searchQuery);
+          c.description.toLowerCase().contains(_searchQuery) ||
+          c.creatorNickname.toLowerCase().contains(_searchQuery);
     }).toList();
+    // 끝난 모임은 목록 맨 아래로 (나머지는 최신순 유지)
+    final active = filtered.where((c) => !c.isExpired);
+    final ended = filtered.where((c) => c.isExpired);
+    return [...active, ...ended];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: '제목·장소·내용 검색 (예: 풋살, 롤, 도서관)',
-                  border: InputBorder.none,
-                ),
-                onChanged: (val) =>
-                    setState(() => _searchQuery = val.trim().toLowerCase()),
-              )
-            : const Text(
-                '한밭 소모임 모집',
-                style: TextStyle(fontWeight: FontWeight.bold),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // 헤더 (홈 화면과 같은 스타일)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (Navigator.canPop(context))
+                    IconButton(
+                      tooltip: '뒤로',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  Expanded(
+                    child: _isSearching
+                        ? TextField(
+                            controller: _searchController,
+                            autofocus: true,
+                            style: const TextStyle(fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: '제목·장소·닉네임 검색',
+                              filled: true,
+                              fillColor: const Color(0xFFF3F4F6),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            onChanged: (val) => setState(
+                                () => _searchQuery = val.trim().toLowerCase()),
+                          )
+                        : const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('함께할 사람 찾기',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.inkSub)),
+                              SizedBox(height: 2),
+                              Text('한밭 소모임',
+                                  style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.8,
+                                      color: AppColors.primary)),
+                            ],
+                          ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: _isSearching ? '검색 닫기' : '검색',
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFF3F4F6),
+                      foregroundColor: AppColors.ink,
+                      fixedSize: const Size(44, 44),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: Icon(_isSearching
+                        ? Icons.close_rounded
+                        : Icons.search_rounded),
+                    onPressed: () {
+                      setState(() {
+                        if (_isSearching) {
+                          _searchQuery = '';
+                          _searchController.clear();
+                        }
+                        _isSearching = !_isSearching;
+                      });
+                    },
+                  ),
+                ],
               ),
-        actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            tooltip: _isSearching ? '검색 닫기' : '검색',
-            onPressed: () {
-              setState(() {
-                if (_isSearching) {
-                  _searchQuery = '';
-                  _searchController.clear();
-                }
-                _isSearching = !_isSearching;
-              });
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // 카테고리 필터 칩
-          SizedBox(
-            height: 56,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _filters.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final category = _filters[index];
-                return ChoiceChip(
-                  label: Text(category),
-                  selected: _selectedCategory == category,
-                  onSelected: (_) =>
-                      setState(() => _selectedCategory = category),
-                );
-              },
             ),
-          ),
-          const Divider(height: 1),
+
+            // 카테고리 필터 (글자 크기에 맞춰 늘어나는 알약 버튼)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  for (var i = 0; i < _filters.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    PillChip(
+                      label: _filters[i],
+                      selected: _selectedCategory == _filters[i],
+                      onTap: () =>
+                          setState(() => _selectedCategory = _filters[i]),
+                      leading: _filters[i] == '전체'
+                          ? null
+                          : Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: clubCategoryColor(_filters[i]),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           Expanded(
             child: StreamBuilder<List<Club>>(
               stream: _clubsStream,
@@ -186,14 +252,15 @@ class _ClubScreenState extends State<ClubScreen> {
                           ? '\'$_searchQuery\'에 대한 검색 결과가 없습니다.'
                           : '아직 등록된 소모임이 없습니다.\n우측 하단 버튼을 눌러 첫 모임을 만들어보세요!',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey, fontSize: 15),
+                      style: const TextStyle(
+                          color: AppColors.inkSub, fontSize: 15, height: 1.5),
                     ),
                   );
                 }
 
                 final uid = _repo.currentUid;
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
                   itemCount: clubs.length,
                   itemBuilder: (context, index) {
                     final club = clubs[index];
@@ -214,6 +281,7 @@ class _ClubScreenState extends State<ClubScreen> {
                             val ? '조기 모집 마감으로 전환되었습니다.' : '모집이 다시 시작되었습니다.',
                       ),
                       onDelete: () => _confirmAndDelete(club),
+                      onEdit: () => _showClubForm(club: club),
                       onOpenChat: () => _openClubChat(club),
                     );
                   },
@@ -221,46 +289,103 @@ class _ClubScreenState extends State<ClubScreen> {
               },
             ),
           ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateClubDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('모임 만들기'),
+        onPressed: () => _showClubForm(),
+        backgroundColor: AppColors.ink,
+        foregroundColor: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: const Icon(Icons.add_rounded, color: AppColors.accent),
+        label: const Text('모임 만들기',
+            style: TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
   }
 }
 
-/// 새 모집글 작성 다이얼로그.
-/// 별도 StatefulWidget으로 분리해 TextEditingController를 제대로 dispose 한다.
-class _CreateClubDialog extends StatefulWidget {
-  const _CreateClubDialog({required this.repo});
+/// 모집글 작성·수정 다이얼로그.
+/// [club]을 넘기면 수정 모드로 기존 내용을 채워서 연다.
+class _ClubFormDialog extends StatefulWidget {
+  const _ClubFormDialog({required this.repo, this.club});
 
   final ClubRepository repo;
+  final Club? club;
 
   @override
-  State<_CreateClubDialog> createState() => _CreateClubDialogState();
+  State<_ClubFormDialog> createState() => _ClubFormDialogState();
 }
 
-class _CreateClubDialogState extends State<_CreateClubDialog> {
-  final _titleController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _timeController = TextEditingController();
-  final _descController = TextEditingController();
+class _ClubFormDialogState extends State<_ClubFormDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _locationController;
+  late final TextEditingController _descController;
 
-  String _category = Club.categories.first;
-  int _maxMembers = 4;
+  late String _category;
+  late int _maxMembers;
+  late DateTime _date; // 날짜만 (시·분은 아래 두 값)
+  late int _hour;
+  late int _minute;
   bool _submitting = false;
   String? _error;
+
+  bool get _isEdit => widget.club != null;
+
+  static const _minutes = [0, 10, 20, 30, 40, 50];
+  static const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+
+  @override
+  void initState() {
+    super.initState();
+    final club = widget.club;
+    _titleController = TextEditingController(text: club?.title ?? '');
+    _locationController = TextEditingController(
+        text: club == null || club.location == '학내 (상세내용 참고)'
+            ? ''
+            : club.location);
+    _descController = TextEditingController(text: club?.description ?? '');
+    _category = club?.category ?? Club.categories.first;
+    _maxMembers = club?.maxMembers ?? 4;
+
+    // 기본 일시: 기존 모임 시간, 없거나 이미 지났으면 지금부터 1시간 뒤(10분 단위 올림)
+    var initial = club?.meetAt;
+    if (initial == null || initial.isBefore(DateTime.now())) {
+      final soon = DateTime.now().add(const Duration(hours: 1));
+      final roundUp = (10 - soon.minute % 10) % 10;
+      initial = DateTime(soon.year, soon.month, soon.day, soon.hour, soon.minute)
+          .add(Duration(minutes: roundUp));
+    }
+    _date = DateTime(initial.year, initial.month, initial.day);
+    _hour = initial.hour;
+    _minute = (initial.minute ~/ 10) * 10;
+  }
 
   @override
   void dispose() {
     _titleController.dispose();
     _locationController.dispose();
-    _timeController.dispose();
     _descController.dispose();
     super.dispose();
+  }
+
+  DateTime get _meetAt =>
+      DateTime(_date.year, _date.month, _date.day, _hour, _minute);
+
+  /// 고를 수 있는 날짜: 오늘부터 2주 (수정 중인 글의 날짜가 범위 밖이면 함께 표시)
+  List<DateTime> get _dateOptions {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = List.generate(14, (i) => today.add(Duration(days: i)));
+    if (!days.contains(_date) && !_date.isBefore(today)) days.add(_date);
+    return days;
+  }
+
+  String _dateChipLabel(DateTime d, int index) {
+    if (index == 0) return '오늘';
+    if (index == 1) return '내일';
+    return '${d.month}.${d.day}(${_weekdays[d.weekday - 1]})';
   }
 
   Future<void> _submit() async {
@@ -275,15 +400,34 @@ class _CreateClubDialogState extends State<_CreateClubDialog> {
     });
     try {
       final location = _locationController.text.trim();
-      final time = _timeController.text.trim();
-      await widget.repo.create(
+      final args = (
         category: _category,
         title: title,
         location: location.isEmpty ? '학내 (상세내용 참고)' : location,
-        time: time.isEmpty ? '추후 협의' : time,
+        meetAt: _meetAt,
         description: _descController.text.trim(),
         maxMembers: _maxMembers,
       );
+      if (_isEdit) {
+        await widget.repo.update(
+          widget.club!.id,
+          category: args.category,
+          title: args.title,
+          location: args.location,
+          meetAt: args.meetAt,
+          description: args.description,
+          maxMembers: args.maxMembers,
+        );
+      } else {
+        await widget.repo.create(
+          category: args.category,
+          title: args.title,
+          location: args.location,
+          meetAt: args.meetAt,
+          description: args.description,
+          maxMembers: args.maxMembers,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } on ClubException catch (e) {
       setState(() {
@@ -295,96 +439,195 @@ class _CreateClubDialogState extends State<_CreateClubDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final nickname = _isEdit
+        ? widget.club!.creatorNickname
+        : (widget.repo.myNickname ?? '익명');
+    // 정원 최소값: 수정할 때는 지금 참여 인원 아래로 못 내림
+    final int minMembers =
+        _isEdit ? widget.club!.currentMembers.clamp(2, 30).toInt() : 2;
+    final dates = _dateOptions;
+    final past = _meetAt.isBefore(DateTime.now());
+
     return AlertDialog(
-      title: const Text(
-        '새 소모임 모집하기',
-        style: TextStyle(fontWeight: FontWeight.bold),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text(
+        _isEdit ? '모집글 수정하기' : '새 소모임 모집하기',
+        style: const TextStyle(fontWeight: FontWeight.w900),
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: const InputDecoration(
-                labelText: '카테고리',
-                border: OutlineInputBorder(),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text('작성자: $nickname (자동 익명 닉네임)',
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.black54)),
+                  ),
+                ],
               ),
-              items: Club.categories
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _category = val);
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: '모임 제목',
-                hintText: '예: 오늘 저녁 대운동장 풋살 2명 급구',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _locationController,
-              decoration: const InputDecoration(
-                labelText: '만나는 장소',
-                hintText: '예: 종합운동장, 도서관 스터디룸',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _timeController,
-              decoration: const InputDecoration(
-                labelText: '일시',
-                hintText: '예: 오늘 19:00 / 매주 수요일',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text('모집 정원 (본인 포함)',
-                      style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: '카테고리',
+                  border: OutlineInputBorder(),
                 ),
-                IconButton(
-                  onPressed: _maxMembers > 2
-                      ? () => setState(() => _maxMembers--)
-                      : null,
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
-                Text(
-                  '$_maxMembers명',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: _maxMembers < 30
-                      ? () => setState(() => _maxMembers++)
-                      : null,
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _descController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '상세 안내 및 공지사항',
-                border: OutlineInputBorder(),
+                items: Club.categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _category = val);
+                },
               ),
-            ),
-            if (_error != null) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: '모임 제목',
+                  hintText: '예: 오늘 저녁 대운동장 풋살 2명 급구',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: '만나는 장소',
+                  hintText: '예: 종합운동장, 도서관 스터디룸',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ---------------- 모임 일시 ----------------
+              const Text('모임 날짜',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+              SizedBox(
+                height: 44,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: dates.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 6),
+                  itemBuilder: (context, i) => PillChip(
+                    label: _dateChipLabel(dates[i], i),
+                    selected: dates[i] == _date,
+                    selectedColor: AppColors.primary,
+                    onTap: () => setState(() => _date = dates[i]),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Text('시간',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _hour,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        labelText: '시',
+                      ),
+                      items: List.generate(
+                          24,
+                          (h) => DropdownMenuItem(
+                              value: h, child: Text('$h시'))),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _hour = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _minute,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        labelText: '분',
+                      ),
+                      items: _minutes
+                          .map((m) => DropdownMenuItem(
+                              value: m,
+                              child: Text('${m.toString().padLeft(2, '0')}분')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _minute = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                past
+                    ? '이미 지난 시간이에요. 지금 이후로 골라 주세요.'
+                    : '${formatMeetAt(_meetAt)} · 이 시간이 지나면 자동으로 \'모임 종료\'가 돼요.',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: past ? Colors.red : Colors.black54),
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('모집 정원 (본인 포함)',
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                  ),
+                  IconButton(
+                    tooltip: '정원 줄이기',
+                    onPressed: _maxMembers > minMembers
+                        ? () => setState(() => _maxMembers--)
+                        : null,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  Text(
+                    '$_maxMembers명',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    tooltip: '정원 늘리기',
+                    onPressed: _maxMembers < 30
+                        ? () => setState(() => _maxMembers++)
+                        : null,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+              if (_isEdit && widget.club!.currentMembers > 2)
+                Text(
+                  '지금 ${widget.club!.currentMembers}명이 참여 중이라 그보다 줄일 수 없어요.',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _descController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '상세 안내 및 공지사항',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -393,14 +636,14 @@ class _CreateClubDialogState extends State<_CreateClubDialog> {
           child: const Text('취소'),
         ),
         FilledButton(
-          onPressed: _submitting ? null : _submit,
+          onPressed: _submitting || past ? null : _submit,
           child: _submitting
               ? const SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('등록하기'),
+              : Text(_isEdit ? '수정하기' : '등록하기'),
         ),
       ],
     );
