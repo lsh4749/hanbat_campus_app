@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'lost_found_item.dart';
+import 'lost_found_repository.dart';
 import 'lost_found_write_screen.dart';
 
 class LostFoundScreen extends StatefulWidget {
@@ -10,9 +13,17 @@ class LostFoundScreen extends StatefulWidget {
 }
 
 class _LostFoundScreenState extends State<LostFoundScreen> {
-  String selectedType = '분실물';
-  String searchText = '';
+  final _repository = LostFoundRepository();
   final _searchController = TextEditingController();
+  late final Stream<List<LostFoundItem>> _itemsStream;
+  String _selectedType = '분실물';
+  String _searchText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _itemsStream = _repository.watchAll();
+  }
 
   @override
   void dispose() {
@@ -20,65 +31,68 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
     super.dispose();
   }
 
-  // 화면 테스트용 데이터. 페이지를 다시 열거나 새로고침하면 사라진다.
-  final List<Map<String, String>> items = [
-    {
-      'type': '분실물',
-      'title': '에어팟',
-      'location': 'S1 도서관',
-      'date': '2026-11-20',
-      'description': '흰색 에어팟입니다. 도서관 2층에서 잃어버렸어요.',
-    },
-    {
-      'type': '분실물',
-      'title': '검은색 지갑',
-      'location': 'S2 학생회관',
-      'date': '2026-11-19',
-      'description': '학생회관 근처에서 분실했습니다.',
-    },
-    {
-      'type': '습득물',
-      'title': '학생증',
-      'location': 'S1 도서관',
-      'date': '2026-11-20',
-      'description': '도서관 입구에서 주웠습니다.',
-    },
-    {
-      'type': '습득물',
-      'title': '에어팟',
-      'location': 'S1 도서관',
-      'date': '2026-11-20',
-      'description': '흰색 에어팟을 도서관에서 발견했습니다.',
-    },
-  ];
-
   Future<void> _openWriteScreen() async {
-    final newItem = await Navigator.of(context).push<Map<String, String>>(
+    // 등록 화면에서 저장에 성공한 유형만 돌려준다.
+    final savedType = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const LostFoundWriteScreen()),
     );
-    if (!mounted || newItem == null) return;
-
+    if (!mounted || savedType == null) return;
     setState(() {
-      items.insert(0, newItem);
-      selectedType = newItem['type']!;
-      searchText = '';
+      _selectedType = savedType;
+      _searchText = '';
       _searchController.clear();
     });
+    // 목록은 Firestore의 snapshots()가 자동으로 갱신한다.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('화면에 등록됐어요. (Firebase 저장 전)')),
+      const SnackBar(content: Text('Firebase에 게시물이 등록됐어요.')),
+    );
+  }
+
+  String _readError(Object error) {
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return '게시물을 읽을 권한이 없어요. Firebase 규칙을 확인해 주세요.';
+      }
+      if (error.code == 'unavailable') {
+        return '네트워크 연결을 확인해 주세요.';
+      }
+      return 'Firebase 조회 오류: ${error.message ?? error.code}';
+    }
+    return '게시물을 불러오지 못했어요: $error';
+  }
+
+  void _showDetail(LostFoundItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(item.title),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('구분: ${item.type}'),
+              Text('종류: ${item.category}'),
+              Text('장소: ${item.location}'),
+              Text('날짜: ${item.eventDateLabel}'),
+              Text('상태: ${item.status == 'open' ? '진행 중' : '반환 완료'}'),
+              const SizedBox(height: 12),
+              Text(item.description),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredItems = items.where((item) {
-      final matchesType = item['type'] == selectedType;
-      final query = searchText.toLowerCase();
-      final matchesSearch = item['title']!.toLowerCase().contains(query) ||
-          item['location']!.toLowerCase().contains(query);
-      return matchesType && matchesSearch;
-    }).toList();
-
     return Scaffold(
       appBar: AppBar(title: const Text('분실물 찾아주기')),
       body: Center(
@@ -99,8 +113,8 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                   children: ['분실물', '습득물'].map((type) {
                     return ChoiceChip(
                       label: Text(type),
-                      selected: selectedType == type,
-                      onSelected: (_) => setState(() => selectedType = type),
+                      selected: _selectedType == type,
+                      onSelected: (_) => setState(() => _selectedType = type),
                     );
                   }).toList(),
                 ),
@@ -112,16 +126,14 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                     prefixIcon: Icon(Icons.search),
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (value) => setState(() => searchText = value),
+                  onChanged: (value) => setState(() => _searchText = value),
                 ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '검색 결과 ${filteredItems.length}건',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      child: Text('$_selectedType 목록',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                     FilledButton.icon(
                       onPressed: _openWriteScreen,
@@ -132,37 +144,45 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: filteredItems.isEmpty
-                      ? const Center(child: Text('검색 결과가 없습니다.'))
-                      : ListView.builder(
-                          itemCount: filteredItems.length,
-                          itemBuilder: (context, index) {
-                            final item = filteredItems[index];
-                            return Card(
-                              child: ListTile(
-                                leading: const Icon(Icons.inventory_2_outlined),
-                                title: Text(item['title']!),
-                                subtitle: Text('${item['location']} · ${item['date']}'),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () {
-                                  showDialog<void>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: Text(item['title']!),
-                                      content: Text(item['description']!),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: const Text('닫기'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
+                  child: StreamBuilder<List<LostFoundItem>>(
+                    stream: _itemsStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(child: Text(_readError(snapshot.error!)));
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final query = _searchText.trim().toLowerCase();
+                      final visible = snapshot.data!.where((item) {
+                        if (item.type != _selectedType) return false;
+                        return item.title.toLowerCase().contains(query) ||
+                            item.location.toLowerCase().contains(query);
+                      }).toList();
+                      if (visible.isEmpty) {
+                        return const Center(
+                          child: Text('등록된 게시물이나 검색 결과가 없습니다.'),
+                        );
+                      }
+                      return ListView.builder(
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) {
+                          final item = visible[index];
+                          return Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.inventory_2_outlined),
+                              title: Text(item.title),
+                              subtitle: Text(
+                                '${item.location} · ${item.eventDateLabel}',
                               ),
-                            );
-                          },
-                        ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _showDetail(item),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
