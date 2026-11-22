@@ -1,5 +1,6 @@
-
 import 'package:flutter/material.dart';
+
+import 'lost_found_write_screen.dart';
 
 class LostFoundScreen extends StatefulWidget {
   const LostFoundScreen({super.key});
@@ -11,8 +12,15 @@ class LostFoundScreen extends StatefulWidget {
 class _LostFoundScreenState extends State<LostFoundScreen> {
   String selectedType = '분실물';
   String searchText = '';
+  final _searchController = TextEditingController();
 
-  // 화면 테스트용 임시 데이터
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // 화면 테스트용 데이터. 페이지를 다시 열거나 새로고침하면 사라진다.
   final List<Map<String, String>> items = [
     {
       'type': '분실물',
@@ -44,25 +52,35 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
     },
   ];
 
+  Future<void> _openWriteScreen() async {
+    final newItem = await Navigator.of(context).push<Map<String, String>>(
+      MaterialPageRoute(builder: (_) => const LostFoundWriteScreen()),
+    );
+    if (!mounted || newItem == null) return;
+
+    setState(() {
+      items.insert(0, newItem);
+      selectedType = newItem['type']!;
+      searchText = '';
+      _searchController.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('화면에 등록됐어요. (Firebase 저장 전)')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredItems = items.where((item) {
       final matchesType = item['type'] == selectedType;
-      final matchesSearch =
-          item['title']!.toLowerCase().contains(
-                searchText.toLowerCase(),
-              ) ||
-          item['location']!.toLowerCase().contains(
-                searchText.toLowerCase(),
-              );
-
+      final query = searchText.toLowerCase();
+      final matchesSearch = item['title']!.toLowerCase().contains(query) ||
+          item['location']!.toLowerCase().contains(query);
       return matchesType && matchesSearch;
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('분실물 찾아주기'),
-      ),
+      appBar: AppBar(title: const Text('분실물 찾아주기')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 850),
@@ -73,93 +91,68 @@ class _LostFoundScreenState extends State<LostFoundScreen> {
               children: [
                 const Text(
                   '캠퍼스 분실물 찾기',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 20),
-
-                // 분실물 / 습득물 전환
                 Wrap(
                   spacing: 12,
                   children: ['분실물', '습득물'].map((type) {
                     return ChoiceChip(
                       label: Text(type),
                       selected: selectedType == type,
-                      onSelected: (_) {
-                        setState(() {
-                          selectedType = type;
-                        });
-                      },
+                      onSelected: (_) => setState(() => selectedType = type),
                     );
                   }).toList(),
                 ),
-
                 const SizedBox(height: 16),
-
-                // 검색창
                 TextField(
+                  controller: _searchController,
                   decoration: const InputDecoration(
                     hintText: '물품 이름 또는 장소 검색',
                     prefixIcon: Icon(Icons.search),
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      searchText = value;
-                    });
-                  },
+                  onChanged: (value) => setState(() => searchText = value),
                 ),
-
                 const SizedBox(height: 20),
-
-                Text(
-                  '검색 결과 ${filteredItems.length}건',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '검색 결과 ${filteredItems.length}건',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _openWriteScreen,
+                      icon: const Icon(Icons.add),
+                      label: const Text('물품 등록'),
+                    ),
+                  ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // 게시물 목록
                 Expanded(
                   child: filteredItems.isEmpty
-                      ? const Center(
-                          child: Text('검색 결과가 없습니다.'),
-                        )
+                      ? const Center(child: Text('검색 결과가 없습니다.'))
                       : ListView.builder(
                           itemCount: filteredItems.length,
                           itemBuilder: (context, index) {
                             final item = filteredItems[index];
-
                             return Card(
                               child: ListTile(
-                                leading: const Icon(
-                                  Icons.inventory_2_outlined,
-                                ),
+                                leading: const Icon(Icons.inventory_2_outlined),
                                 title: Text(item['title']!),
-                                subtitle: Text(
-                                  '${item['location']} · ${item['date']}',
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                ),
+                                subtitle: Text('${item['location']} · ${item['date']}'),
+                                trailing: const Icon(Icons.chevron_right),
                                 onTap: () {
-                                  showDialog(
+                                  showDialog<void>(
                                     context: context,
                                     builder: (context) => AlertDialog(
                                       title: Text(item['title']!),
-                                      content: Text(
-                                        item['description']!,
-                                      ),
+                                      content: Text(item['description']!),
                                       actions: [
                                         TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(context);
-                                          },
+                                          onPressed: () => Navigator.pop(context),
                                           child: const Text('닫기'),
                                         ),
                                       ],
