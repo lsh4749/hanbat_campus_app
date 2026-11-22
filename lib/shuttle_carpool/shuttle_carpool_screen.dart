@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../club/club.dart' show nicknameFor;
 import 'commuter_bus_tab.dart';
 
 class ShuttleCarpoolScreen extends StatelessWidget {
@@ -57,6 +59,13 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
     _loadUserProfile();
   }
 
+  /// 소모임과 같은 자동 익명 닉네임 (예: '용감한 너구리').
+  /// 익명 로그인 uid로 만들어서 같은 기기는 소모임·카풀에서 같은 닉네임이 나온다.
+  String get _autoNickname {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null ? '익명 한밭인' : nicknameFor(uid);
+  }
+
   Future<void> _loadUserProfile() async {
     final prefs = await SharedPreferences.getInstance();
     String? id = prefs.getString('no_auth_user_id');
@@ -64,7 +73,10 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
       id = 'anon_${DateTime.now().millisecondsSinceEpoch}';
       await prefs.setString('no_auth_user_id', id);
     }
-    final savedNick = prefs.getString('no_auth_nickname') ?? '익명 한밭인';
+    // 직접 바꾼 닉네임이 있으면 그걸, 없으면(예전 기본값 포함) 자동 닉네임
+    final stored = prefs.getString('no_auth_nickname');
+    final savedNick =
+        (stored == null || stored == '익명 한밭인') ? _autoNickname : stored;
     if (mounted) {
       setState(() {
         _userId = id!;
@@ -88,6 +100,16 @@ class _IntegratedCarpoolTabState extends State<_IntegratedCarpoolTab> {
           ),
         ),
         actions: [
+          // 직접 정한 닉네임을 지우고 자동 닉네임으로 돌아가기
+          TextButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('no_auth_nickname');
+              if (mounted) setState(() => _nickname = _autoNickname);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('자동 닉네임'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('취소'),
