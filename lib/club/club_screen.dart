@@ -6,6 +6,8 @@ import 'club.dart';
 import 'club_repository.dart';
 import 'widgets/club_card.dart';
 
+// import '../chat/chat_screen.dart';
+
 class ClubScreen extends StatefulWidget {
   const ClubScreen({super.key});
 
@@ -59,10 +61,8 @@ class _ClubScreenState extends State<ClubScreen> {
     // Navigator.push(
     //   context,
     //   MaterialPageRoute(
-    //     builder: (_) => ChatRoomScreen(
-    //       roomId: 'club_${club.id}',
-    //       roomTitle: club.title,
-    //     ),
+    //     builder: (_) =>
+    //         ChatRoomScreen(roomId: 'club_${club.id}', roomTitle: club.title),
     //   ),
     // );
     _showSnack('[${club.title}] 채팅방 연결 예정 (Room ID: club_${club.id})');
@@ -151,30 +151,39 @@ class _ClubScreenState extends State<ClubScreen> {
                               fillColor: const Color(0xFFF3F4F6),
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 12),
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
                               ),
                             ),
                             onChanged: (val) => setState(
-                                () => _searchQuery = val.trim().toLowerCase()),
+                              () => _searchQuery = val.trim().toLowerCase(),
+                            ),
                           )
                         : const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('함께할 사람 찾기',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.inkSub)),
+                              Text(
+                                '함께할 사람 찾기',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.inkSub,
+                                ),
+                              ),
                               SizedBox(height: 2),
-                              Text('한밭 소모임',
-                                  style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.8,
-                                      color: AppColors.primary)),
+                              Text(
+                                '한밭 소모임',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.8,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ],
                           ),
                   ),
@@ -186,11 +195,12 @@ class _ClubScreenState extends State<ClubScreen> {
                       foregroundColor: AppColors.ink,
                       fixedSize: const Size(44, 44),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    icon: Icon(_isSearching
-                        ? Icons.close_rounded
-                        : Icons.search_rounded),
+                    icon: Icon(
+                      _isSearching ? Icons.close_rounded : Icons.search_rounded,
+                    ),
                     onPressed: () {
                       setState(() {
                         if (_isSearching) {
@@ -233,62 +243,66 @@ class _ClubScreenState extends State<ClubScreen> {
                 ],
               ),
             ),
-          Expanded(
-            child: StreamBuilder<List<Club>>(
-              stream: _clubsStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('오류가 발생했습니다: ${snapshot.error}'));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            Expanded(
+              child: StreamBuilder<List<Club>>(
+                stream: _clubsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('오류가 발생했습니다: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                final clubs = _applyFilters(snapshot.data!);
-                if (clubs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      _searchQuery.isNotEmpty
-                          ? '\'$_searchQuery\'에 대한 검색 결과가 없습니다.'
-                          : '아직 등록된 소모임이 없습니다.\n우측 하단 버튼을 눌러 첫 모임을 만들어보세요!',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: AppColors.inkSub, fontSize: 15, height: 1.5),
-                    ),
-                  );
-                }
-
-                final uid = _repo.currentUid;
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-                  itemCount: clubs.length,
-                  itemBuilder: (context, index) {
-                    final club = clubs[index];
-                    return ClubCard(
-                      club: club,
-                      uid: uid,
-                      onJoin: () => _run(
-                        () => _repo.join(club.id),
-                        success: '모임 참여 완료! 이제 모임 채팅방에 입장할 수 있습니다.',
+                  final clubs = _applyFilters(snapshot.data!);
+                  if (clubs.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchQuery.isNotEmpty
+                            ? '\'$_searchQuery\'에 대한 검색 결과가 없습니다.'
+                            : '아직 등록된 소모임이 없습니다.\n우측 하단 버튼을 눌러 첫 모임을 만들어보세요!',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.inkSub,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
                       ),
-                      onLeave: () => _run(
-                        () => _repo.leave(club.id),
-                        success: '모임 참여가 취소되었습니다.',
-                      ),
-                      onToggleClose: (val) => _run(
-                        () => _repo.setClosedEarly(club.id, val),
-                        success:
-                            val ? '조기 모집 마감으로 전환되었습니다.' : '모집이 다시 시작되었습니다.',
-                      ),
-                      onDelete: () => _confirmAndDelete(club),
-                      onEdit: () => _showClubForm(club: club),
-                      onOpenChat: () => _openClubChat(club),
                     );
-                  },
-                );
-              },
+                  }
+
+                  final uid = _repo.currentUid;
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                    itemCount: clubs.length,
+                    itemBuilder: (context, index) {
+                      final club = clubs[index];
+                      return ClubCard(
+                        club: club,
+                        uid: uid,
+                        onJoin: () => _run(
+                          () => _repo.join(club.id),
+                          success: '모임 참여 완료! 이제 모임 채팅방에 입장할 수 있습니다.',
+                        ),
+                        onLeave: () => _run(
+                          () => _repo.leave(club.id),
+                          success: '모임 참여가 취소되었습니다.',
+                        ),
+                        onToggleClose: (val) => _run(
+                          () => _repo.setClosedEarly(club.id, val),
+                          success: val
+                              ? '조기 모집 마감으로 전환되었습니다.'
+                              : '모집이 다시 시작되었습니다.',
+                        ),
+                        onDelete: () => _confirmAndDelete(club),
+                        onEdit: () => _showClubForm(club: club),
+                        onOpenChat: () => _openClubChat(club),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
           ],
         ),
       ),
@@ -296,11 +310,12 @@ class _ClubScreenState extends State<ClubScreen> {
         onPressed: () => _showClubForm(),
         backgroundColor: AppColors.ink,
         foregroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         icon: const Icon(Icons.add_rounded, color: AppColors.accent),
-        label: const Text('모임 만들기',
-            style: TextStyle(fontWeight: FontWeight.w800)),
+        label: const Text(
+          '모임 만들기',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
       ),
     );
   }
@@ -342,9 +357,10 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
     final club = widget.club;
     _titleController = TextEditingController(text: club?.title ?? '');
     _locationController = TextEditingController(
-        text: club == null || club.location == '학내 (상세내용 참고)'
-            ? ''
-            : club.location);
+      text: club == null || club.location == '학내 (상세내용 참고)'
+          ? ''
+          : club.location,
+    );
     _descController = TextEditingController(text: club?.description ?? '');
     _category = club?.category ?? Club.categories.first;
     _maxMembers = club?.maxMembers ?? 4;
@@ -354,8 +370,13 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
     if (initial == null || initial.isBefore(DateTime.now())) {
       final soon = DateTime.now().add(const Duration(hours: 1));
       final roundUp = (10 - soon.minute % 10) % 10;
-      initial = DateTime(soon.year, soon.month, soon.day, soon.hour, soon.minute)
-          .add(Duration(minutes: roundUp));
+      initial = DateTime(
+        soon.year,
+        soon.month,
+        soon.day,
+        soon.hour,
+        soon.minute,
+      ).add(Duration(minutes: roundUp));
     }
     _date = DateTime(initial.year, initial.month, initial.day);
     _hour = initial.hour;
@@ -443,8 +464,9 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
         ? widget.club!.creatorNickname
         : (widget.repo.myNickname ?? '익명');
     // 정원 최소값: 수정할 때는 지금 참여 인원 아래로 못 내림
-    final int minMembers =
-        _isEdit ? widget.club!.currentMembers.clamp(2, 30).toInt() : 2;
+    final int minMembers = _isEdit
+        ? widget.club!.currentMembers.clamp(2, 30).toInt()
+        : 2;
     final dates = _dateOptions;
     final past = _meetAt.isBefore(DateTime.now());
 
@@ -465,12 +487,20 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.person_outline, size: 16, color: Colors.grey),
+                  const Icon(
+                    Icons.person_outline,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text('작성자: $nickname (자동 익명 닉네임)',
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.black54)),
+                    child: Text(
+                      '작성자: $nickname (자동 익명 닉네임)',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -509,8 +539,10 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
               const SizedBox(height: 16),
 
               // ---------------- 모임 일시 ----------------
-              const Text('모임 날짜',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                '모임 날짜',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 44,
@@ -529,8 +561,10 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Text('시간',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    '시간',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: DropdownButtonFormField<int>(
@@ -541,9 +575,9 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
                         labelText: '시',
                       ),
                       items: List.generate(
-                          24,
-                          (h) => DropdownMenuItem(
-                              value: h, child: Text('$h시'))),
+                        24,
+                        (h) => DropdownMenuItem(value: h, child: Text('$h시')),
+                      ),
                       onChanged: (v) {
                         if (v != null) setState(() => _hour = v);
                       },
@@ -559,9 +593,12 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
                         labelText: '분',
                       ),
                       items: _minutes
-                          .map((m) => DropdownMenuItem(
+                          .map(
+                            (m) => DropdownMenuItem(
                               value: m,
-                              child: Text('${m.toString().padLeft(2, '0')}분')))
+                              child: Text('${m.toString().padLeft(2, '0')}분'),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) {
                         if (v != null) setState(() => _minute = v);
@@ -576,16 +613,19 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
                     ? '이미 지난 시간이에요. 지금 이후로 골라 주세요.'
                     : '${formatMeetAt(_meetAt)} · 이 시간이 지나면 자동으로 \'모임 종료\'가 돼요.',
                 style: TextStyle(
-                    fontSize: 12,
-                    color: past ? Colors.red : Colors.black54),
+                  fontSize: 12,
+                  color: past ? Colors.red : Colors.black54,
+                ),
               ),
               const SizedBox(height: 12),
 
               Row(
                 children: [
                   const Expanded(
-                    child: Text('모집 정원 (본인 포함)',
-                        style: TextStyle(fontWeight: FontWeight.w500)),
+                    child: Text(
+                      '모집 정원 (본인 포함)',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
                   ),
                   IconButton(
                     tooltip: '정원 줄이기',
@@ -597,7 +637,9 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
                   Text(
                     '$_maxMembers명',
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   IconButton(
                     tooltip: '정원 늘리기',
