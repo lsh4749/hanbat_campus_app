@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../app/app_theme.dart';
 import '../app/widgets/pill_chip.dart';
+import '../chat/chat_screen.dart';
 import 'club.dart';
 import 'club_repository.dart';
 import 'widgets/club_card.dart';
-
-// import '../chat/chat_screen.dart';
 
 class ClubScreen extends StatefulWidget {
   const ClubScreen({super.key});
@@ -54,18 +53,17 @@ class _ClubScreenState extends State<ClubScreen> {
   }
 
   // =========================================================================
-  // [추후 실시간 채팅 팀원 기능 연결 지점]
-  // 채팅 담당 팀원이 만든 화면(예: ChatRoomScreen)이 완성되면 아래 주석을 해제하고 연결하세요.
+  // [실시간 채팅 연결] 모임마다 전용 채팅방 하나 (방 ID: club_<모임 문서 ID>)
+  // 채팅 버튼은 모임장과 참여자에게만 보인다 (ClubCard).
   // =========================================================================
   void _openClubChat(Club club) {
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) =>
-    //         ChatRoomScreen(roomId: 'club_${club.id}', roomTitle: club.title),
-    //   ),
-    // );
-    _showSnack('[${club.title}] 채팅방 연결 예정 (Room ID: club_${club.id})');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatRoomScreen(roomId: 'club_${club.id}', roomTitle: club.title),
+      ),
+    );
   }
 
   /// 새 글 작성 ([club]이 없을 때) 또는 내 글 수정 ([club]이 있을 때)
