@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_theme.dart';
+import '../app/widgets/page_header.dart';
 import '../building/building_screen.dart';
 import '../chat/chat_screen.dart';
 import '../lost_found/lost_found_screen.dart';
@@ -27,10 +28,20 @@ class MoreScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('더보기', style: TextStyle(fontWeight: FontWeight.w800)),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const AppPageHeader(subtitle: '모든 기능 한눈에', title: '더보기'),
+            Expanded(child: _buildList(entries)),
+          ],
+        ),
       ),
-      body: ListView.separated(
+    );
+  }
+
+  Widget _buildList(List<_MoreEntry> entries) {
+    return ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         itemCount: entries.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -62,8 +73,7 @@ class MoreScreen extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
+      );
   }
 }
 

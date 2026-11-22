@@ -14,7 +14,11 @@ import '../restaurant/restaurant_screen.dart';
 ///   final category = ModalRoute.of(context)?.settings.arguments as String?;
 ///   // 예: '중식' → 중식 맛집만 필터링해서 보여주기
 class RouletteScreen extends StatefulWidget {
-  const RouletteScreen({super.key});
+  const RouletteScreen({super.key, this.pickOnly = false});
+
+  /// true: 맛집 화면에서 열었을 때. 뽑힌 음식 종류를 돌려주며 닫힌다
+  ///       (맛집 화면이 그 종류로 필터링). false: 홈에서 열었을 때, 맛집 화면으로 이동.
+  final bool pickOnly;
 
   /// 홈 타일 → 룰렛 화면 전환 시 룰렛 판이 커지며 이어지는 Hero 태그
   static const heroTag = 'menu-roulette-wheel';
@@ -86,6 +90,10 @@ class _RouletteScreenState extends State<RouletteScreen>
   }
 
   void _openRestaurants(String category) {
+    if (widget.pickOnly) {
+      Navigator.pop(context, category);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(

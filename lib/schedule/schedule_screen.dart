@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_theme.dart';
+import '../app/widgets/page_header.dart';
 import '../notifications/notification_center.dart';
 import 'academic_event.dart';
 
@@ -18,11 +20,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('학교 주요 일정',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const AppPageHeader(subtitle: '등록금 · 수강신청 · 시험', title: '학교 주요 일정'),
+            Expanded(child: _buildList()),
+          ],
+        ),
       ),
-      body: FutureBuilder<List<AcademicEvent>>(
+    );
+  }
+
+  Widget _buildList() {
+    return FutureBuilder<List<AcademicEvent>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -48,7 +59,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Text(
                   month,
                   style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink),
                 ),
               ));
             }
@@ -60,7 +73,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             children: children,
           );
         },
-      ),
     );
   }
 }
@@ -79,17 +91,25 @@ class _EventTile extends StatelessWidget {
       opacity: past ? 0.45 : 1,
       child: Card(
         margin: const EdgeInsets.only(bottom: 8),
-        elevation: highlight ? 3 : 1,
+        color: highlight
+            ? event.typeColor.withValues(alpha: 0.10)
+            : const Color(0xFFF5F6F8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
           side: highlight
               ? BorderSide(color: event.typeColor, width: 1.5)
               : BorderSide.none,
         ),
         child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: event.typeColor.withValues(alpha: 0.12),
-            child: Icon(event.typeIcon, color: event.typeColor, size: 20),
+          contentPadding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(event.typeIcon, color: event.typeColor, size: 22),
           ),
           title: Text(event.title,
               style: const TextStyle(fontWeight: FontWeight.w600)),
