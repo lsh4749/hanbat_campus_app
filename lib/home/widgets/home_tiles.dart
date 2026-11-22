@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/widgets/bento_tile.dart';
@@ -14,9 +15,11 @@ void _push(BuildContext context, Widget screen) {
 }
 
 // ===========================================================================
-// 오늘의 학식 + 원터치 리뷰. 누르면 학식·기숙사 식단 상세 화면(MealScreen)으로 이동.
-// 데이터: assets/data/meals.json (tools/crawl_meals.py로 매주 갱신)
-// 평일엔 학식 중식(백반), 주말·공휴일엔 지금 시간에 맞는 기숙사 식단을 보여준다.
+// 오늘의 식단 + 원터치 리뷰
+// - 위쪽 [학식 | 기숙사] 버튼으로 같은 자리에서 식단을 바꿔 본다. 마지막 선택은 기억한다.
+//   (처음엔 오늘 학식이 있으면 학식, 없으면 기숙사)
+// - 누르면 고른 쪽 탭으로 식단 상세 화면(MealScreen)이 열린다.
+// - 데이터: assets/data/meals.json (tools/crawl_meals.py로 갱신, 담당: 임경중)
 // TODO: 리뷰를 Firestore에 저장할지 학식 담당과 정해서 _onReview에 연결.
 // ===========================================================================
 class MealTile extends StatefulWidget {
@@ -28,9 +31,36 @@ class MealTile extends StatefulWidget {
 
 enum MealReview { good, soso, bad }
 
+/// 타일에 그릴 내용 한 묶음
+class _MealView {
+  const _MealView({
+    required this.label,
+    required this.menu,
+    this.sides = '',
+    this.reviewKey,
+  });
+
+  final String label;
+  final String menu;
+  final String sides;
+
+  /// 리뷰를 남길 수 있는 끼니면 '식당_날짜_끼니', 아니면 null
+  final String? reviewKey;
+}
+
 class _MealTileState extends State<MealTile> {
-  MealReview? _picked;
+  static const _prefKey = 'home_meal_source';
+
+  // 학생식당 중식(백반) 운영 시간: assets/data/meal_info.json 기준 11:30 ~ 13:30
+  static const _lunchEnd = (hour: 13, minute: 30);
+
   late final Future<WeeklyMeals> _future = MealRepository.instance.loadMeals();
+
+  /// 사용자가 마지막으로 고른 식당 (한 번도 안 골랐으면 null → 자동)
+  MealSource? _saved;
+
+  /// 리뷰는 식당·날짜·끼니별로 따로 기억 (아직은 화면에서만, 저장 안 함)
+  final Map<String, MealReview> _reviews = {};
 
   static const _labels = {
     MealReview.good: '맛있어요',
@@ -38,59 +68,128 @@ class _MealTileState extends State<MealTile> {
     MealReview.bad: '아쉬워요',
   };
 
-  void _onReview(MealReview review) {
-    setState(() => _picked = _picked == review ? null : review);
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      final v = prefs.getString(_prefKey);
+      if (!mounted || v == null) return;
+      setState(() => _saved =
+          v == MealSource.dorm.name ? MealSource.dorm : MealSource.cafeteria);
+    });
+  }
+
+  Future<void> _selectSource(MealSource source) async {
+    setState(() => _saved = source);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKey, source.name);
+  }
+
+  void _onReview(String key, MealReview review) {
+    setState(() {
+      if (_reviews[key] == review) {
+        _reviews.remove(key);
+      } else {
+        _reviews[key] = review;
+      }
+    });
+  }
+
+  MealSource _effectiveSource(WeeklyMeals? meals, DateTime now) {
+    if (_saved != null) return _saved!;
+    final hasLunch = meals?.cafeteriaOn(now)?[MealTime.lunch] != null;
+    return hasLunch ? MealSource.cafeteria : MealSource.dorm;
+  }
+
+  _MealView _cafeteriaView(WeeklyMeals meals, DateTime now) {
+    final lunch = meals.cafeteriaOn(now)?[MealTime.lunch];
+    if (lunch == null) {
+      return _MealView(
+        label: '학생식당',
+        menu: '오늘은 학식이 쉬어요',
+        sides: now.weekday >= DateTime.saturday
+            ? '토·일·공휴일 휴무 · 기숙사 식단을 확인해 보세요'
+            : '아직 등록된 식단이 없어요',
+      );
+    }
+    final end = DateTime(
+        now.year, now.month, now.day, _lunchEnd.hour, _lunchEnd.minute);
+    final ended = now.isAfter(end);
+    return _MealView(
+      label: ended ? '오늘의 학식 · 중식 · 운영 종료' : '오늘의 학식 · 중식',
+      menu: lunch.mainDish,
+      sides: lunch.sides.take(3).join(' · '),
+      reviewKey: 'cafeteria_${dateKey(now)}_lunch',
+    );
+  }
+
+  _MealView _dormView(WeeklyMeals meals, DateTime now) {
+    final day = meals.dormOn(now);
+    if (day == null || day.isEmpty) {
+      return const _MealView(
+        label: '기숙사',
+        menu: '오늘 기숙사 식단이 없어요',
+        sides: '아직 등록된 식단이 없어요',
+      );
+    }
+    // 지금 시간에 맞는 끼니 (10시 전 아침, 15시 전 점심, 그 뒤 저녁)
+    final preferred = now.hour < 10
+        ? MealTime.breakfast
+        : (now.hour < 15 ? MealTime.lunch : MealTime.dinner);
+    for (final time in [preferred, ...MealTime.values]) {
+      final menu = day[time];
+      if (menu == null) continue;
+      return _MealView(
+        label: '오늘의 기숙사 식단 · ${time.label}',
+        menu: menu.mainDish,
+        sides: menu.sides.take(3).join(' · '),
+        reviewKey: 'dorm_${dateKey(now)}_${time.name}',
+      );
+    }
+    return const _MealView(label: '기숙사', menu: '오늘 기숙사 식단이 없어요');
   }
 
   @override
   Widget build(BuildContext context) {
-    return BentoTile(
-      color: AppColors.primary,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      semanticLabel: '학식 · 기숙사 식단 자세히 보기',
-      onTap: () => _push(context, const MealScreen()),
-      child: FutureBuilder<WeeklyMeals>(
-        future: _future,
-        builder: (context, snapshot) {
-          final now = DateTime.now();
-          final pick = snapshot.data?.todayPick(now);
+    return FutureBuilder<WeeklyMeals>(
+      future: _future,
+      builder: (context, snapshot) {
+        final now = DateTime.now();
+        final meals = snapshot.data;
+        final source = _effectiveSource(meals, now);
 
-          var title = '오늘의 학식';
-          String menu;
-          String sides;
-          if (snapshot.hasError) {
-            menu = '식단을 불러오지 못했어요';
-            sides = '잠시 후 다시 확인해 주세요.';
-          } else if (!snapshot.hasData) {
-            menu = '불러오는 중…';
-            sides = '';
-          } else if (pick == null) {
-            menu = '오늘은 학식이 없어요';
-            sides = now.weekday >= DateTime.saturday
-                ? '토·일·공휴일은 학생식당이 쉬어요.'
-                : '아직 등록된 식단이 없어요.';
-          } else {
-            title = pick.source == MealSource.cafeteria
-                ? '오늘의 학식 · ${pick.time.cafeteriaLabel}'
-                : '오늘의 기숙사 식단 · ${pick.time.label}';
-            menu = pick.menu.mainDish;
-            sides = pick.menu.sides.take(3).join(' · ');
-          }
-          // 리뷰는 학식(백반)이 있을 때만
-          final canReview = pick?.source == MealSource.cafeteria;
+        final _MealView view;
+        if (snapshot.hasError) {
+          view = const _MealView(
+              label: '오늘의 식단',
+              menu: '식단을 불러오지 못했어요',
+              sides: '잠시 후 다시 확인해 주세요.');
+        } else if (meals == null) {
+          view = const _MealView(label: '오늘의 식단', menu: '불러오는 중…');
+        } else {
+          view = source == MealSource.cafeteria
+              ? _cafeteriaView(meals, now)
+              : _dormView(meals, now);
+        }
+        final key = view.reviewKey;
+        final picked = key == null ? null : _reviews[key];
 
-          return Column(
+        return BentoTile(
+          color: AppColors.primary,
+          padding: const EdgeInsets.fromLTRB(18, 14, 14, 16),
+          semanticLabel: '식단 자세히 보기',
+          onTap: () => _push(
+            context,
+            MealScreen(initialTab: source == MealSource.dorm ? 1 : 0),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // [학식 | 기숙사] 전환 + 전체 식단
               Row(
                 children: [
-                  Expanded(
-                    child: Text(title,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onPrimarySub)),
-                  ),
+                  _SourceToggle(source: source, onChanged: _selectSource),
+                  const Spacer(),
                   const Text('전체 식단',
                       style: TextStyle(
                           fontSize: 12,
@@ -100,8 +199,14 @@ class _MealTileState extends State<MealTile> {
                       size: 18, color: AppColors.onPrimarySub),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(menu,
+              const SizedBox(height: 10),
+              Text(view.label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onPrimarySub)),
+              const SizedBox(height: 4),
+              Text(view.menu,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -109,44 +214,45 @@ class _MealTileState extends State<MealTile> {
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.8,
                       color: Colors.white)),
-              if (sides.isNotEmpty) ...[
+              if (view.sides.isNotEmpty) ...[
                 const SizedBox(height: 2),
-                Text(sides,
+                Text(view.sides,
                     style: const TextStyle(
                         fontSize: 14, color: AppColors.onPrimaryBody)),
               ],
-              if (canReview) ...[
+              if (key != null) ...[
                 const SizedBox(height: 14),
                 Row(
                   children: [
                     for (final review in MealReview.values) ...[
                       if (review != MealReview.good) const SizedBox(width: 8),
-                      Expanded(child: _reviewButton(review)),
+                      Expanded(
+                          child: _reviewButton(
+                              review, picked == review, () => _onReview(key, review))),
                     ],
                   ],
                 ),
-                if (_picked != null) ...[
+                if (picked != null) ...[
                   const SizedBox(height: 10),
                   Text(
-                    '"${_labels[_picked]}" 평가가 반영됐어요. 한 번 더 누르면 취소돼요.',
+                    '"${_labels[picked]}" 평가가 반영됐어요. 한 번 더 누르면 취소돼요.',
                     style: const TextStyle(
                         fontSize: 12, color: AppColors.onPrimaryBody),
                   ),
                 ],
               ],
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _reviewButton(MealReview review) {
-    final on = _picked == review;
+  Widget _reviewButton(MealReview review, bool on, VoidCallback onTap) {
     return Semantics(
       selected: on,
       child: TextButton(
-        onPressed: () => _onReview(review),
+        onPressed: onTap,
         style: TextButton.styleFrom(
           minimumSize: const Size.fromHeight(44),
           backgroundColor:
@@ -158,6 +264,65 @@ class _MealTileState extends State<MealTile> {
           padding: EdgeInsets.zero,
         ),
         child: Text(_labels[review]!),
+      ),
+    );
+  }
+}
+
+/// 남색 타일 위의 [학식 | 기숙사] 전환 버튼
+class _SourceToggle extends StatelessWidget {
+  const _SourceToggle({required this.source, required this.onChanged});
+
+  final MealSource source;
+  final ValueChanged<MealSource> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _option('학식', MealSource.cafeteria),
+          _option('기숙사', MealSource.dorm),
+        ],
+      ),
+    );
+  }
+
+  Widget _option(String label, MealSource value) {
+    final on = source == value;
+    return Semantics(
+      selected: on,
+      button: true,
+      label: '$label 식단 보기',
+      excludeSemantics: true,
+      child: Material(
+        color: on ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => onChanged(value),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 34),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.3,
+                  fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                  color: on ? AppColors.primary : AppColors.onPrimaryBody,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
