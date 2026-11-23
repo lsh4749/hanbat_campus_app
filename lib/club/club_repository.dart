@@ -192,7 +192,12 @@ class ClubRepository {
   }
 
   Future<void> setClosedEarly(String clubId, bool closed) {
-    return _guard(() => _clubs.doc(clubId).update({'isClosedEarly': closed}));
+    // 조기 마감한 시각을 남겨 두고, 24시간 뒤 목록에서 숨긴다.
+    return _guard(() => _clubs.doc(clubId).update({
+          'isClosedEarly': closed,
+          'closedAt':
+              closed ? FieldValue.serverTimestamp() : FieldValue.delete(),
+        }));
   }
 
   Future<void> delete(String clubId) {

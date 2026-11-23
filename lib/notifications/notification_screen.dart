@@ -29,6 +29,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   void _open(AppNotification n) {
     final Widget screen = switch (n.type) {
       NotificationType.club => const ClubScreen(),
+      NotificationType.clubJoin => const ClubScreen(),
       NotificationType.lostFound => const LostFoundScreen(),
       NotificationType.chat => const ChatScreen(),
       NotificationType.schedule => const ScheduleScreen(),
@@ -78,6 +79,8 @@ class _NotificationTile extends StatelessWidget {
     return switch (type) {
       NotificationType.club =>
         (Icons.groups_rounded, AppColors.greenSub, AppColors.greenBg),
+      NotificationType.clubJoin =>
+        (Icons.person_add_alt_1_rounded, AppColors.greenSub, AppColors.greenBg),
       NotificationType.lostFound =>
         (Icons.search_rounded, AppColors.redIcon, AppColors.redBg),
       NotificationType.chat =>

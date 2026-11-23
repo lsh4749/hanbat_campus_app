@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../club/club.dart';
 import '../schedule/academic_event.dart';
 
-enum NotificationType { club, lostFound, chat, schedule }
+enum NotificationType { club, clubJoin, lostFound, chat, schedule }
 
 /// 알림 한 건
 class AppNotification {
@@ -35,6 +36,7 @@ class AppNotification {
 ///
 /// 알림이 생기는 경우
 /// 1. 새 소모임 글 (다른 사람이 올린 글, 최근 3일)       → Firestore `clubs`
+/// 1-1. 내가 만든 모임에 누가 참여했을 때                → Firestore `clubs` (creatorId == 나)
 /// 2. 새 분실물 글 (다른 사람이 올린 글, 최근 3일)       → Firestore [lostFoundCollection]
 /// 3. 나에게 온 새 채팅                                  → 채팅 기능에서 [addChatMessage] 호출
 /// 4. 내가 알림을 켠 학사 일정의 하루 전 / 당일          → 일정 화면 종 버튼
@@ -52,9 +54,13 @@ class NotificationCenter extends ChangeNotifier {
   static const _kLastReadMs = 'notif_last_read_ms';
   static const _kReadSchedule = 'notif_read_schedule_ids';
   static const _kAlarms = 'schedule_alarm_keys';
+  static const _kSeenMembers = 'notif_club_seen_members';
+  static const _kJoinItems = 'notif_club_join_items';
+  static const _maxJoinItems = 30;
   static const _recentDays = 3;
 
   final List<AppNotification> _club = [];
+  final List<AppNotification> _clubJoin = [];
   final List<AppNotification> _lostFound = [];
   final List<AppNotification> _chat = [];
   final List<AppNotification> _schedule = [];
@@ -63,13 +69,17 @@ class NotificationCenter extends ChangeNotifier {
   DateTime _lastReadAt = DateTime.fromMillisecondsSinceEpoch(0);
   Set<String> _readScheduleIds = {};
   Set<String> _alarmKeys = {};
+
+  /// 모임 id → 마지막으로 확인한 참여자 uid 목록 (새로 들어온 사람을 찾는 기준)
+  Map<String, List<String>> _seenMembers = {};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _myClubSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clubSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _lostSub;
   bool _started = false;
 
   /// 최신순 전체 알림
   List<AppNotification> get items {
-    final all = [..._club, ..._lostFound, ..._chat, ..._schedule];
+    final all = [..._club, ..._clubJoin, ..._lostFound, ..._chat, ..._schedule];
     all.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return all;
   }
@@ -99,8 +109,10 @@ class NotificationCenter extends ChangeNotifier {
     }
     _readScheduleIds = (_prefs!.getStringList(_kReadSchedule) ?? []).toSet();
     _alarmKeys = (_prefs!.getStringList(_kAlarms) ?? []).toSet();
+    _loadClubJoins();
 
     _listenClubs();
+    _listenMyClubs();
     _listenLostFound();
     await refreshSchedule();
   }
@@ -142,6 +154,103 @@ class NotificationCenter extends ChangeNotifier {
                 )));
       notifyListeners();
     }, onError: (Object e) => debugPrint('소모임 알림 구독 실패: $e'));
+  }
+
+  // ---------------------------------------------------------------- 내 모임 참여 알림
+  /// 내가 만든 모임을 구독하다가 참여자 목록에 새 사람이 생기면 알림을 만든다.
+  /// 참여 시각은 DB에 없으므로, 휴대폰에 저장해 둔 이전 참여자 목록과 비교한다.
+  Future<void> _listenMyClubs() async {
+    final user = FirebaseAuth.instance.currentUser ??
+        await FirebaseAuth.instance
+            .authStateChanges()
+            .firstWhere((u) => u != null);
+    final uid = user!.uid;
+
+    _myClubSub = FirebaseFirestore.instance
+        .collection('clubs')
+        .where('creatorId', isEqualTo: uid)
+        .snapshots()
+        .listen((snap) {
+      final now = DateTime.now();
+      final nextSeen = <String, List<String>>{};
+      var added = false;
+
+      for (final doc in snap.docs) {
+        final club = Club.fromDoc(doc);
+        final current = club.participants;
+        final before = _seenMembers[club.id];
+        nextSeen[club.id] = current;
+        // 처음 보는 모임은 기준만 저장 (예전 참여자까지 알림이 몰려오지 않게)
+        if (before == null) continue;
+
+        for (final member in current) {
+          if (member == uid || before.contains(member)) continue;
+          _clubJoin.insert(
+            0,
+            AppNotification(
+              id: 'join_${club.id}_${member}_${now.microsecondsSinceEpoch}',
+              type: NotificationType.clubJoin,
+              title: '내 모임에 새 멤버가 참여했어요',
+              body: '${nicknameFor(member)}님 · ${club.title} '
+                  '(${club.currentMembers}/${club.maxMembers})',
+              createdAt: now,
+              refId: club.id,
+            ),
+          );
+          added = true;
+        }
+      }
+
+      // 삭제된 모임은 기준 목록에서도 빠진다.
+      _seenMembers = nextSeen;
+      if (_clubJoin.length > _maxJoinItems) {
+        _clubJoin.removeRange(_maxJoinItems, _clubJoin.length);
+      }
+      _saveClubJoins();
+      if (added) notifyListeners();
+    }, onError: (Object e) => debugPrint('내 모임 참여 알림 구독 실패: $e'));
+  }
+
+  void _loadClubJoins() {
+    try {
+      final seen = _prefs!.getString(_kSeenMembers);
+      if (seen != null) {
+        final map = jsonDecode(seen) as Map<String, dynamic>;
+        _seenMembers = map.map((k, v) => MapEntry(k, List<String>.from(v)));
+      }
+      for (final raw in _prefs!.getStringList(_kJoinItems) ?? const []) {
+        final m = jsonDecode(raw) as Map<String, dynamic>;
+        _clubJoin.add(AppNotification(
+          id: m['id'] as String,
+          type: NotificationType.clubJoin,
+          title: m['title'] as String,
+          body: m['body'] as String,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(m['ms'] as int),
+          refId: m['ref'] as String?,
+        ));
+      }
+    } catch (e) {
+      // 저장 형식이 깨졌으면 처음부터 다시 시작
+      debugPrint('참여 알림 불러오기 실패: $e');
+      _seenMembers = {};
+      _clubJoin.clear();
+    }
+  }
+
+  Future<void> _saveClubJoins() async {
+    await _prefs?.setString(_kSeenMembers, jsonEncode(_seenMembers));
+    await _prefs?.setStringList(
+      _kJoinItems,
+      _clubJoin
+          .map((n) => jsonEncode({
+                'id': n.id,
+                'title': n.title,
+                'body': n.body,
+                'ms': n.createdAt.millisecondsSinceEpoch,
+                'ref': n.refId,
+              }))
+          .toList(),
+    );
   }
 
   // ---------------------------------------------------------------- 분실물
@@ -261,6 +370,7 @@ class NotificationCenter extends ChangeNotifier {
   @override
   void dispose() {
     _clubSub?.cancel();
+    _myClubSub?.cancel();
     _lostSub?.cancel();
     super.dispose();
   }

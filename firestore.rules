@@ -43,7 +43,7 @@ service cloud.firestore {
         return resource.data.creatorId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['title', 'location', 'time', 'meetAt', 'description',
-                         'category', 'maxMembers', 'isClosedEarly', 'updatedAt'])
+                         'category', 'maxMembers', 'isClosedEarly', 'closedAt', 'updatedAt'])
           && request.resource.data.maxMembers is int
           && request.resource.data.maxMembers >= resource.data.participants.size()
           && request.resource.data.maxMembers <= 30
