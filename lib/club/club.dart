@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// - currentMembers: participants 길이와 항상 같게 유지 (보안 규칙에서 검사)
 /// - maxMembers: 정원 (2~30)
 /// - isClosedEarly: 모임장 조기 마감 여부
+/// - closedAt: 조기 마감한 시각 (서버 시간, 마감을 풀면 삭제)
 /// - createdAt, updatedAt: 서버 시간
 class Club {
   static const List<String> categories = ['운동', '게임', '스터디', '공모전', '자유'];
@@ -29,6 +30,7 @@ class Club {
   final List<String> participants;
   final int maxMembers;
   final bool isClosedEarly;
+  final DateTime? closedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -45,6 +47,7 @@ class Club {
     required this.maxMembers,
     required this.isClosedEarly,
     this.meetAt,
+    this.closedAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -55,6 +58,25 @@ class Club {
 
   /// 모임 시간이 지났는지 (meetAt이 없는 예전 글은 종료되지 않음)
   bool get isExpired => meetAt != null && DateTime.now().isAfter(meetAt!);
+
+  /// 끝난 모임이 목록에 남아 있는 시간
+  static const Duration hideAfter = Duration(hours: 24);
+
+  /// 모임이 끝난 시각.
+  /// - 조기 마감했으면 마감한 시각 (모임 일시가 더 이르면 모임 일시)
+  /// - 아니면 처음 정한 모임 일시 (정원이 안 찼거나 마감을 안 눌러도 적용)
+  DateTime? get endedAt {
+    final closed = isClosedEarly ? (closedAt ?? updatedAt) : null;
+    if (closed == null) return meetAt;
+    if (meetAt == null) return closed;
+    return closed.isBefore(meetAt!) ? closed : meetAt;
+  }
+
+  /// 끝난 지 24시간이 지나 목록에서 숨길 모임 (문서는 Firestore에 남아 있음)
+  bool get isHidden {
+    final ended = endedAt;
+    return ended != null && DateTime.now().isAfter(ended.add(hideAfter));
+  }
 
   bool get isRecruiting => !isFull && !isClosedEarly && !isExpired;
 
@@ -74,7 +96,7 @@ class Club {
     return '모집중';
   }
 
-  /// 화면에 보여줄 일시. meetAt이 있으면 '오늘 19:00', '11.24(화) 19:00' 형식
+  /// 화면에 보여줄 일시. meetAt이 있으면 '11.24(화) 19:00' 형식
   String get timeLabel => meetAt == null ? time : formatMeetAt(meetAt!);
 
   factory Club.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -92,6 +114,7 @@ class Club {
       participants: List<String>.from(data['participants'] ?? const []),
       maxMembers: (data['maxMembers'] as num?)?.toInt() ?? 4,
       isClosedEarly: data['isClosedEarly'] as bool? ?? false,
+      closedAt: (data['closedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -100,17 +123,11 @@ class Club {
 
 const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 
-/// '오늘 19:00' / '내일 07:30' / '11.24(화) 19:00'
+/// 항상 실제 날짜로 표시: '11.24(화) 19:00'
+/// ('오늘/내일'은 글을 본 날짜에 따라 의미가 달라져 헷갈리므로 쓰지 않음)
 String formatMeetAt(DateTime t) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(t.year, t.month, t.day);
-  final diff = day.difference(today).inDays;
   final hm =
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  if (diff == 0) return '오늘 $hm';
-  if (diff == 1) return '내일 $hm';
-  if (diff == 2) return '모레 $hm';
   return '${t.month}.${t.day}(${_weekdays[t.weekday - 1]}) $hm';
 }
 

@@ -103,6 +103,8 @@ class _ClubScreenState extends State<ClubScreen> {
 
   List<Club> _applyFilters(List<Club> clubs) {
     final filtered = clubs.where((c) {
+      // 끝난 지 24시간 지난 모임은 목록에서 제거
+      if (c.isHidden) return false;
       if (_selectedCategory != '전체' && c.category != _selectedCategory) {
         return false;
       }
@@ -402,8 +404,6 @@ class _ClubFormDialogState extends State<_ClubFormDialog> {
   }
 
   String _dateChipLabel(DateTime d, int index) {
-    if (index == 0) return '오늘';
-    if (index == 1) return '내일';
     return '${d.month}.${d.day}(${_weekdays[d.weekday - 1]})';
   }
 
