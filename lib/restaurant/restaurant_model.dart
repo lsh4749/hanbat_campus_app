@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 /// 룰렛 칸과 맛집 데이터의 category 값이 반드시 같은 문자열이어야 필터링된다.
-const foodCategories = ['한식', '중식', '일식', '양식', '분식', '치킨'];
+const foodCategories = ['한식', '중식', '일식', '양식', '분식', '치킨', '고기', '국밥'];
 
 class Restaurant {
   final String id, name, category, menu, hours, address;
